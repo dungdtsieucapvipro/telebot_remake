@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, JobQueue
 from concurrent.futures import ThreadPoolExecutor
@@ -30,6 +30,17 @@ async def display_help(update: Update) -> None:
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
+#! Hàm thiết lập các lệnh cho bot
+async def set_bot_commands(application):
+    commands = [
+        BotCommand("hello", "Chào hỏi bot"),
+        BotCommand("auto", "Bắt đầu chế độ tự động lấy dữ liệu"),
+        BotCommand("stop", "Dừng chế độ tự động lấy dữ liệu"),
+        BotCommand("getstock", "Lấy thông tin mã chứng khoán"),
+        BotCommand("getallstocks", "Lấy tất cả thông tin chứng khoán"),
+        BotCommand("help", "Hướng dẫn sử dụng bot"),
+    ]
+    await application.bot.set_my_commands(commands)
 
 #! Hàm chào hỏi
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -47,7 +58,7 @@ async def auto_fetch_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     job = context.job_queue.run_repeating(fetch_data_job, interval=60, first=0, chat_id=update.message.chat_id)
     context.chat_data["auto_fetch_job"] = job
     await update.message.reply_text("Đã bắt đầu chế độ tự động lấy dữ liệu.")
-
+    await display_help(update)
 async def fetch_data_job(context: ContextTypes.DEFAULT_TYPE):
     await asyncio.get_event_loop().run_in_executor(executor, fetch_all_stock_data)
     logging.info("Đã tự động lấy dữ liệu chứng khoán.")
@@ -61,7 +72,7 @@ async def stop_auto_fetch(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Đã dừng chế độ tự động.")
     else:
         await update.message.reply_text("Không có chế độ tự động nào đang chạy.")
-
+    await display_help(update)
 #! Hàm lấy thông tin chứng khoán cụ thể
 async def get_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if context.args:
