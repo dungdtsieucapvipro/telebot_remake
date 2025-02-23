@@ -1,6 +1,6 @@
 import mysql.connector
 
-def connect_db():
+def connect_database():
     # Kết nối đến cơ sở dữ liệu MySQL
     try:
         connection = mysql.connector.connect(
