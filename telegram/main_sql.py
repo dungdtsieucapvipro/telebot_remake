@@ -1,6 +1,6 @@
 from telegram import Update
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, JobQueue
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import asyncio
@@ -22,7 +22,7 @@ async def display_help(update: Update) -> None:
     help_text = (
         "💡 *Hướng dẫn sử dụng bot:*\n"
         "- /hello: Chào hỏi bot\n"
-        "- /start: Bắt đầu chế độ tự động lấy dữ liệu\n"
+        "- /auto: Bắt đầu chế độ tự động lấy dữ liệu\n"
         "- /stop: Dừng chế độ tự động lấy dữ liệu\n"
         "- /getstock <Mã chứng khoán>: Xem thông tin về mã chứng khoán cụ thể (Ví dụ: `/getstock ACB`)\n"
         "- /getallstocks: Lấy tất cả thông tin chứng khoán hiện tại\n"
@@ -42,32 +42,25 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await display_help(update)    
 
 
-#! Tự động lấy dữ liệu từ cơ sở dữ liệu sau mỗi 1 phút và dừng bằng lệnh /stop
+#! Hàm tự động lấy dữ liệu mỗi 1 phút
 async def auto_fetch_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Đang bắt đầu chế độ tự động...")
-    try:
-        while True:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(executor, fetch_all_stock_data)
-            logging.info("Đã tự động lấy và lưu dữ liệu chứng khoán.")
-            await asyncio.sleep(60) 
-    except asyncio.CancelledError:
-        #! Dừng chế độ tự động bằng lệnh /stop
-        await update.message.reply_text("Đã dừng chế độ tự động.")
-        loop = asyncio.get_event_loop()
-        loop.stop()
-        logging.info("Đã dừng chế độ tự động.")
-    finally:
-        loop.close() 
-#! Dừng chế độ tự động bằng lệnh /stop
+    job = context.job_queue.run_repeating(fetch_data_job, interval=60, first=0, chat_id=update.message.chat_id)
+    context.chat_data["auto_fetch_job"] = job
+    await update.message.reply_text("Đã bắt đầu chế độ tự động lấy dữ liệu.")
+
+async def fetch_data_job(context: ContextTypes.DEFAULT_TYPE):
+    await asyncio.get_event_loop().run_in_executor(executor, fetch_all_stock_data)
+    logging.info("Đã tự động lấy dữ liệu chứng khoán.")
+
+#! Hàm dừng chế độ tự động
 async def stop_auto_fetch(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Đang dừng chế độ tự động...")
-    try:
-        loop = asyncio.get_event_loop()
-        loop.stop()
-        logging.info("Đã dừng chế độ tự động.")
-    except Exception as e:
-        await update.message.reply_text(f"Lỗi: {str(e)}")
+    job = context.chat_data.get("auto_fetch_job")
+    if job:
+        job.schedule_removal()
+        del context.chat_data["auto_fetch_job"]
+        await update.message.reply_text("Đã dừng chế độ tự động.")
+    else:
+        await update.message.reply_text("Không có chế độ tự động nào đang chạy.")
 
 #! Hàm lấy thông tin chứng khoán cụ thể
 async def get_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -134,8 +127,8 @@ app = ApplicationBuilder().token('7928962019:AAFT_w5aEzE-M875p1zPkJTSn7r1a7tLRNY
 app.add_handler(CommandHandler("hello", hello))
 app.add_handler(CommandHandler("getstock", get_stock))
 app.add_handler(CommandHandler("getallstocks", get_all_stocks))
-app.add_handler(CommandHandler("start", auto_fetch_data))
-app.add_handler(CommandHandler("stop", auto_fetch_data))
+app.add_handler(CommandHandler("auto", auto_fetch_data))
+app.add_handler(CommandHandler("stop", stop_auto_fetch))
 app.add_handler(CommandHandler("help", help_command))
 
 #! Chạy bot
