@@ -26,6 +26,9 @@ async def display_help(update: Update) -> None:
         # "- /stop: Dừng chế độ tự động lấy dữ liệu\n"
         "- /getstock <Mã chứng khoán>: Xem thông tin về mã chứng khoán cụ thể (Ví dụ: `/getstock ACB`)\n"
         "- /getallstocks: Lấy tất cả thông tin chứng khoán hiện tại\n"
+        "- /theodoi3p: Theo dõi mã ck trong 3p (Ví dụ: `/theodoi3p ACB`)\n"
+        "- /theodoiall: Theo dõi giá 1 của tất cả mã chứng khoán trong bao nhiêu phút (Ví dụ: `/theodoiall 5`)\n"
+        "- /sosanh <Mã chứng khoán> <Điều kiện> <Giá>: So sánh giá 1 của mã chứng khoán với giá đã nhập (Ví dụ: `/sosanh ACB > 25.00`)\n"
         "- /help: Hiển thị danh sách các lệnh\n"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
@@ -38,6 +41,7 @@ async def set_bot_commands(application):
         BotCommand("stop", "Dừng chế độ tự động lấy dữ liệu"),
         BotCommand("getstock", "Lấy thông tin mã chứng khoán"),
         BotCommand("getallstocks", "Lấy tất cả thông tin chứng khoán"),
+        BotCommand("theodoi3p", "Theo dõi mã ck trong 3p (Ví dụ: `/theodoi3p ACB`)"),
         BotCommand("help", "Hướng dẫn sử dụng bot"),
     ]
     await application.bot.set_my_commands(commands)
@@ -142,6 +146,120 @@ async def get_all_stocks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logging.error(f"Đã xảy ra lỗi: {str(e)}")
         await update.message.reply_text(f"Đã xảy ra lỗi: {str(e)}")
     await display_help(update)
+
+#! Hàm theo dõi giá trị bestOffer1
+async def track_stock_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if context.args:
+        stock_code = context.args[0].strip().upper()
+        await update.message.reply_text(f"🔄 Đang theo dõi giá cho mã chứng khoán: {stock_code}...")
+
+        # Lấy giá ban đầu từ cơ sở dữ liệu
+        initial_data = await asyncio.get_event_loop().run_in_executor(executor, single_stock_data, stock_code)
+        
+        if not initial_data or len(initial_data) == 0:
+            await update.message.reply_text("Không tìm thấy mã chứng khoán.")
+            return
+        
+        # Truy cập phần tử đầu tiên trong danh sách
+        initial_price = float(initial_data[0]['best1offer_price'])
+        await asyncio.sleep(180)  # Chờ 3 phút
+
+        # Lấy giá sau 3 phút
+        updated_data = await asyncio.get_event_loop().run_in_executor(executor, single_stock_data, stock_code)
+        
+        if not updated_data or len(updated_data) == 0:
+            await update.message.reply_text("Không tìm thấy mã chứng khoán.")
+            return
+        
+        # Truy cập phần tử đầu tiên trong danh sách
+        updated_price = float(updated_data[0]['best1offer_price'])
+
+        # So sánh giá và thông báo
+        if updated_price > initial_price:
+            await update.message.reply_text(f"{stock_code} tăng từ {initial_price} lên {updated_price} → {stock_code} đáng đầu tư.")
+        else:
+            await update.message.reply_text(f"{stock_code} không đáng đầu tư.")
+    else:
+        await update.message.reply_text("Vui lòng nhập mã chứng khoán sau lệnh /theodoi3p. Ví dụ: /theodoi3p ACB")
+
+#! Hàm theo dõi giá cho tất cả mã chứng khoán
+async def track_all_stocks_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if context.args:
+        try:
+            duration_minutes = int(context.args[0])
+            await update.message.reply_text(f"🔄 Đang theo dõi giá cho tất cả mã chứng khoán trong {duration_minutes} phút...")
+            
+            # Lấy tất cả mã chứng khoán
+            all_stocks_data = await asyncio.get_event_loop().run_in_executor(executor, all_stock_data)
+            initial_prices = {item['stock_code']: float(item['best1offer_price']) for item in all_stocks_data}
+            await asyncio.sleep(duration_minutes * 60)  # Chờ trong thời gian đã nhập
+
+            # Lấy giá sau thời gian theo dõi
+            updated_stocks_data = await asyncio.get_event_loop().run_in_executor(executor, all_stock_data)
+            updated_prices = {item['stock_code']: float(item['best1offer_price']) for item in updated_stocks_data}
+
+            # So sánh giá và thông báo
+            increased_stocks = []
+            max_increase = 0
+            best_stock = None
+
+            for stock_code, initial_price in initial_prices.items():
+                updated_price = updated_prices.get(stock_code)
+                if updated_price:
+                    increase_percentage = ((updated_price - initial_price) / initial_price) * 100
+                    if increase_percentage >= 1:  # Nếu tăng từ 1%
+                        increased_stocks.append((stock_code, initial_price, updated_price, increase_percentage))
+                        if increase_percentage > max_increase:
+                            max_increase = increase_percentage
+                            best_stock = (stock_code, initial_price, updated_price)
+
+            # Gửi thông báo
+            if increased_stocks:
+                for stock in increased_stocks:
+                    await update.message.reply_text(f"{stock[0]} tăng từ {stock[1]} lên {stock[2]} ({stock[3]:.2f}%)")
+                if best_stock:
+                    await update.message.reply_text(f"{best_stock[0]} là mã chứng khoán đáng đầu tư nhất, tăng từ {best_stock[1]} lên {best_stock[2]} ({max_increase:.2f}%)")
+            else:
+                await update.message.reply_text("Không có mã chứng khoán nào tăng từ 1% trở lên.")
+        except ValueError:
+            await update.message.reply_text("Vui lòng nhập số phút hợp lệ.")
+    else:
+        await update.message.reply_text("Vui lòng nhập số phút theo dõi sau lệnh /theodoiall. Ví dụ: /theodoiall 5")
+
+#! Hàm so sánh giá
+async def compare_stock_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if context.args and len(context.args) == 3:
+        stock_code = context.args[0].strip().upper()
+        comparison_operator = context.args[1].strip()  # ">" hoặc "<"
+        target_price = float(context.args[2])
+
+        await update.message.reply_text(f"🔄 Đang theo dõi giá cho mã chứng khoán: {stock_code}...")
+
+        # Lấy giá hiện tại từ cơ sở dữ liệu
+        stock_data = await asyncio.get_event_loop().run_in_executor(executor, single_stock_data, stock_code)
+
+        if not stock_data or len(stock_data) == 0:
+            await update.message.reply_text("Không tìm thấy mã chứng khoán.")
+            return
+
+        current_price = float(stock_data[0]['best1offer_price'])
+
+        # So sánh giá
+        if comparison_operator == ">":
+            if current_price > target_price:
+                await update.message.reply_text(f"{stock_code} hiện tại có giá {current_price}, lớn hơn {target_price}.")
+            else:
+                await update.message.reply_text(f"{stock_code} hiện tại có giá {current_price}, không lớn hơn {target_price}.")
+        elif comparison_operator == "<":
+            if current_price < target_price:
+                await update.message.reply_text(f"{stock_code} hiện tại có giá {current_price}, nhỏ hơn {target_price}.")
+            else:
+                await update.message.reply_text(f"{stock_code} hiện tại có giá {current_price}, không nhỏ hơn {target_price}.")
+        else:
+            await update.message.reply_text("Vui lòng sử dụng '>' hoặc '<' để so sánh.")
+    else:
+        await update.message.reply_text("Vui lòng nhập mã chứng khoán, điều kiện so sánh và giá. Ví dụ: /sosanh ACB > 25.00")
+
 #! Khởi tạo bot
 app = ApplicationBuilder().token('7928962019:AAFT_w5aEzE-M875p1zPkJTSn7r1a7tLRNY').build()
 
@@ -152,6 +270,9 @@ app.add_handler(CommandHandler("getallstocks", get_all_stocks))
 app.add_handler(CommandHandler("auto", auto_fetch_data))
 app.add_handler(CommandHandler("stop", stop_auto_fetch))
 app.add_handler(CommandHandler("help", help_command))
+app.add_handler(CommandHandler("theodoi3p", track_stock_price))
+app.add_handler(CommandHandler("theodoiall", track_all_stocks_price))
+app.add_handler(CommandHandler("sosanh", compare_stock_price))
 
 #! Chạy bot
 app.run_polling()
