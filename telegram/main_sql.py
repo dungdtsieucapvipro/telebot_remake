@@ -22,8 +22,8 @@ async def display_help(update: Update) -> None:
     help_text = (
         "💡 *Hướng dẫn sử dụng bot:*\n"
         "- /hello: Chào hỏi bot\n"
-        "- /auto: Bắt đầu chế độ tự động lấy dữ liệu\n"
-        "- /stop: Dừng chế độ tự động lấy dữ liệu\n"
+        # "- /auto: Bắt đầu chế độ tự động lấy dữ liệu\n"
+        # "- /stop: Dừng chế độ tự động lấy dữ liệu\n"
         "- /getstock <Mã chứng khoán>: Xem thông tin về mã chứng khoán cụ thể (Ví dụ: `/getstock ACB`)\n"
         "- /getallstocks: Lấy tất cả thông tin chứng khoán hiện tại\n"
         "- /help: Hiển thị danh sách các lệnh\n"
@@ -53,8 +53,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await display_help(update)    
 
 
+# Đặt ID của admin
+ADMIN_ID = 6133213893  # Thay thế bằng ID của bạn
+
 #! Hàm tự động lấy dữ liệu mỗi 1 phút
 async def auto_fetch_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Bạn không có quyền sử dụng lệnh này.")
+        return
+
     job = context.job_queue.run_repeating(fetch_data_job, interval=60, first=0, chat_id=update.message.chat_id)
     context.chat_data["auto_fetch_job"] = job
     await update.message.reply_text("Đã bắt đầu chế độ tự động lấy dữ liệu.")
@@ -65,6 +72,10 @@ async def fetch_data_job(context: ContextTypes.DEFAULT_TYPE):
 
 #! Hàm dừng chế độ tự động
 async def stop_auto_fetch(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Bạn không có quyền sử dụng lệnh này.")
+        return
+
     job = context.chat_data.get("auto_fetch_job")
     if job:
         job.schedule_removal()
