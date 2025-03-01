@@ -52,13 +52,12 @@ def fetch_all_stock_data():
             tc_cells = page.locator("//div[contains(@class, 'ag-cell') and @col-id='refPrice']").all()
             tc_prices = [cell.inner_text().strip() for cell in tc_cells]
 
-            # # Lấy danh sách tổng khối lượng giao dịch, bỏ qua "Tổng KL"
-            # trade_volume_elements = page.locator("//div[contains(@class, 'ag-cell') and @col-id='nmTotalTradedQty']").all()
-            # trade_volumes = []
-            # for volume in trade_volume_elements:
-            #     trade_volume = volume.inner_text().strip()
-            #     if trade_volume != "Tổng KL" and trade_volume != "":
-            #         trade_volumes.append(trade_volume)
+            #lấy giá bán 1
+            best1offer_cells = page.locator("//div[contains(@class, 'ag-cell') and @col-id='best1Offer']").all()
+            best1offer_prices = [cell.inner_text().strip() for cell in best1offer_cells]
+
+
+           
 
             result = []
             # In ra mã chứng khoán kèm giá trần, giá sàn và giá tham chiếu và tổng khối lượng giao dịch
@@ -67,16 +66,17 @@ def fetch_all_stock_data():
                 ceiling_price = ceiling_prices[i] if i < len(ceiling_prices) else "Không có giá trần"
                 floor_price = floor_prices[i] if i < len(floor_prices) else "Không có giá sàn"
                 tc_price = tc_prices[i] if i < len(tc_prices) else "Không có giá tham chiếu"
-                # total_traded_qty = trade_volumes[i] if i < len(trade_volumes) else "Không có tổng khối lượng giao dịch"
+                best1offer_price = best1offer_prices[i] if i < len(best1offer_prices) else "Không có giá bán 1"
                 
-                print(f"Mã chứng khoán: {stock_code}, Giá trần: {ceiling_price}, Giá sàn: {floor_price}, Giá tham chiếu: {tc_price}")
+                print(f"Mã chứng khoán: {stock_code}, Giá trần: {ceiling_price}, Giá sàn: {floor_price}, Giá tham chiếu: {tc_price}, Giá bán 1: {best1offer_price}")
                 result.append({
                     "stock_code": stock_code,
                     "ceiling_price": ceiling_price,
                     "floor_price": floor_price,
                     "tc_price": tc_price,
-                    # "total_traded_qty": total_traded_qty
+                    "best1offer_price": best1offer_price,
                 })  
+  
 
             save_to_mysql(result)
             # Đóng trình duyệt
@@ -129,12 +129,12 @@ def fetch_single_stock_data(stock_code):
             tc_cells = page.locator("//div[contains(@class, 'ag-cell') and @col-id='refPrice']").all()
             tc_price = tc_cells[index].inner_text().strip() if index < len(tc_cells) else "Không có giá tham chiếu"
 
-            # # Lấy danh sách tổng khối lượng giao dịch, bỏ qua "Tổng KL"
-            # trade_volume_elements = page.locator("//div[contains(@class, 'ag-cell') and @col-id='nmTotalTradedQty']").all()
-            # trade_volume = trade_volume_elements[index].inner_text().strip() if index < len(trade_volume_elements) else "Không có tổng khối lượng giao dịch"
+            # Lấy danh sách giá bán 1
+            best1offer_cells = page.locator("//div[contains(@class, 'ag-cell') and @col-id='best1offer']").all()
+            best1offer_price = best1offer_cells[index].inner_text().strip() if index < len(best1offer_cells) else "Không có giá bán 1"
 
             # In ra thông tin mã chứng khoán
-            print(f"Mã chứng khoán: {stock_code}, Giá trần: {ceiling_price}, Giá sàn: {floor_price}, Giá tham chiếu: {tc_price}")
+            print(f"Mã chứng khoán: {stock_code}, Giá trần: {ceiling_price}, Giá sàn: {floor_price}, Giá tham chiếu: {tc_price}, Giá bán 1: {best1offer_price}")
 
             # Đóng trình duyệt
             browser.close()
@@ -144,7 +144,7 @@ def fetch_single_stock_data(stock_code):
                 "ceiling_price": ceiling_price,
                 "floor_price": floor_price,
                 "tc_price": tc_price,
-                # "total_traded_qty": trade_volume
+                "best1offer_price": best1offer_price
             }
 
     except Exception as e:
@@ -211,23 +211,23 @@ def save_to_mysql(result):
 
         # Chèn dữ liệu mới vào bảng `tempory_stocks` va 'tracked_stocks_history'
         for item in result:
-            if item['ceiling_price'] == 'N/A' or item['floor_price'] == 'N/A' or item['tc_price'] == 'N/A':
+            if item['ceiling_price'] == 'N/A' or item['floor_price'] == 'N/A' or item['tc_price'] == 'N/A'  or item['best1offer_price'] == 'N/A' :
                 print(f"Chưa đủ dữ liệu cho mã {item['stock_code']}. Bỏ qua.")
                 continue
 
             current_time = datetime.now()  # Lấy thời gian hiện tại
             # Chèn dữ liệu vào bảng `tempory_stocks`
-            cursor.execute("""
-                INSERT INTO tempory_stocks (stock_code, ceiling_price, floor_price, tc_price, timestamp)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (item['stock_code'], item['ceiling_price'], item['floor_price'], item['tc_price'], current_time))
+            cursor.execute(""" 
+                INSERT INTO tempory_stocks (stock_code, ceiling_price, floor_price, tc_price, best1offer_price, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (item['stock_code'], item['ceiling_price'], item['floor_price'], item['tc_price'], item['best1offer_price'], current_time))
             print(f"Đã chèn thành công mã {item['stock_code']} vào bảng `tempory_stocks`.")
 
             # Chèn dữ liệu vào bảng `tracked_stocks_history`
-            cursor.execute("""
-                INSERT INTO tracked_stocks_history (stock_code, ceiling_price, floor_price, tc_price, timestamp)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (item['stock_code'], item['ceiling_price'], item['floor_price'], item['tc_price'], current_time))
+            cursor.execute(""" 
+                INSERT INTO tracked_stocks_history (stock_code, ceiling_price, floor_price, tc_price, best1offer_price, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (item['stock_code'], item['ceiling_price'], item['floor_price'], item['tc_price'], item['best1offer_price'], current_time))
             print(f"Đã chèn thành công mã {item['stock_code']} vào bảng `tracked_stocks_history`.")
         # Lưu thay đổi
         database_connection.commit()

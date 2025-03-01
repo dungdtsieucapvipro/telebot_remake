@@ -52,13 +52,7 @@ def fetch_all_stock_data():
             best1offer_prices = [cell.inner_text().strip() for cell in best1offer_cells]
 
 
-            # Lấy danh sách tổng khối lượng giao dịch, bỏ qua "Tổng KL"
-            trade_volume_elements = page.locator("//div[contains(@class, 'ag-cell') and @col-id='nmTotalTradedQty']").all()
-            trade_volumes = []
-            for volume in trade_volume_elements:
-                trade_volume = volume.inner_text().strip()
-                if trade_volume != "Tổng KL" and trade_volume != "":
-                    trade_volumes.append(trade_volume)
+           
 
             result = []
             # In ra mã chứng khoán kèm giá trần, giá sàn và giá tham chiếu và tổng khối lượng giao dịch
@@ -68,16 +62,14 @@ def fetch_all_stock_data():
                 floor_price = floor_prices[i] if i < len(floor_prices) else "Không có giá sàn"
                 tc_price = tc_prices[i] if i < len(tc_prices) else "Không có giá tham chiếu"
                 best1offer_price = best1offer_prices[i] if i < len(best1offer_prices) else "Không có giá bán 1"
-                total_traded_qty = trade_volumes[i] if i < len(trade_volumes) else "Không có tổng khối lượng giao dịch"
                 
-                print(f"Mã chứng khoán: {stock_code}, Giá trần: {ceiling_price}, Giá sàn: {floor_price}, Giá tham chiếu: {tc_price}, Giá bán 1: {best1offer_price} ,Tổng KL giao dịch: {total_traded_qty}")
+                print(f"Mã chứng khoán: {stock_code}, Giá trần: {ceiling_price}, Giá sàn: {floor_price}, Giá tham chiếu: {tc_price}, Giá bán 1: {best1offer_price}")
                 result.append({
                     "stock_code": stock_code,
                     "ceiling_price": ceiling_price,
                     "floor_price": floor_price,
                     "tc_price": tc_price,
                     "best1offer_price": best1offer_price,
-                    "total_traded_qty": total_traded_qty
                 })  
 
             # Đóng trình duyệt
@@ -132,13 +124,10 @@ def fetch_single_stock_data(stock_code):
             #lấy giá bán 1
             best1offer_cells = page.locator("//div[contains(@class, 'ag-cell') and @col-id='best1Offer']").all()
             best1offer_price = best1offer_cells[index].inner_text().strip() if index < len(best1offer_cells) else "Không có giá bán 1"
-           
-            # Lấy danh sách tổng khối lượng giao dịch, bỏ qua "Tổng KL"
-            trade_volume_elements = page.locator("//div[contains(@class, 'ag-cell') and @col-id='nmTotalTradedQty']").all()
-            trade_volume = trade_volume_elements[index].inner_text().strip() if index < len(trade_volume_elements) else "Không có tổng khối lượng giao dịch"
+            
 
             # In ra thông tin mã chứng khoán
-            print(f"Mã chứng khoán: {stock_code}, Giá trần: {ceiling_price}, Giá sàn: {floor_price}, Giá tham chiếu: {tc_price},Giá bán 1: {best1offer_price} , Tổng KL giao dịch: {trade_volume}")
+            print(f"Mã chứng khoán: {stock_code}, Giá trần: {ceiling_price}, Giá sàn: {floor_price}, Giá tham chiếu: {tc_price},Giá bán 1: {best1offer_price} ")
 
             # Đóng trình duyệt
             browser.close()
@@ -149,7 +138,6 @@ def fetch_single_stock_data(stock_code):
                 "floor_price": floor_price,
                 "tc_price": tc_price,
                 "best1offer_price": best1offer_price,
-                "total_traded_qty": trade_volume
             }
 
     except Exception as e:

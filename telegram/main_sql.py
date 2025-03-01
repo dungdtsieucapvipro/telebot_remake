@@ -99,9 +99,9 @@ async def get_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 message = (
                     f"*Kết quả được lấy lúc:* `{current_time}`\n"
                     f"```\n"
-                    f"| Mã chứng khoán | Giá trần  | Giá sàn  | Giá TC   |\n"
-                    f"|----------------|-----------|----------|----------|\n"
-                    f"| {stock_data['stock_code']:<14} | {stock_data['ceiling_price']:<9} | {stock_data['floor_price']:<8} | {stock_data['tc_price']:<8} |\n"
+                    f"| Mã chứng khoán | Giá trần  | Giá sàn  | Giá TC   | Giá Bán 1   |\n"
+                    f"|----------------|-----------|----------|----------|----------|\n"
+                    f"| {stock_data['stock_code']:<14} | {stock_data['ceiling_price']:<9} | {stock_data['floor_price']:<8} | {stock_data['tc_price']:<8} | {stock_data['best1offer_price']:<8} |\n"
                     f"```"
                 )
                 await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
@@ -125,13 +125,13 @@ async def get_all_stocks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             header = (
                 f"*Kết quả được lấy lúc:* `{current_time}`\n"
                 f"```\n"
-                f"| Mã chứng khoán | Giá trần  | Giá sàn  | Giá TC   |\n"
-                f"|----------------|-----------|----------|----------|\n"
+                f"| Mã chứng khoán | Giá trần  | Giá sàn  | Giá TC   | Giá Bán 1   |\n"
+                f"|----------------|-----------|----------|----------|----------|\n"
             )
             rows = ""
             for item in stock_data:
                 rows += (
-                    f"| {item['stock_code']:<14} | {item['ceiling_price']:<9} | {item['floor_price']:<8} | {item['tc_price']:<8} |\n"
+                    f"| {item['stock_code']:<14} | {item['ceiling_price']:<9} | {item['floor_price']:<8} | {item['tc_price']:<8} | {item['best1offer_price']:<8} |\n"
                 )
             footer = "```"
             message = header + rows + footer
