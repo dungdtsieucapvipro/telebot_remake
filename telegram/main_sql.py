@@ -22,14 +22,13 @@ async def display_help(update: Update) -> None:
     help_text = (
         "💡 *Hướng dẫn sử dụng bot:*\n"
         "- /hello: Chào hỏi bot\n"
-        # "- /auto: Bắt đầu chế độ tự động lấy dữ liệu\n"
-        # "- /stop: Dừng chế độ tự động lấy dữ liệu\n"
         "- /getstock <Mã chứng khoán>: Xem thông tin về mã chứng khoán cụ thể (Ví dụ: `/getstock ACB`)\n"
         "- /getallstocks: Lấy tất cả thông tin chứng khoán hiện tại\n"
-        "- /theodoi3p: Theo dõi mã ck trong 3p (Ví dụ: `/theodoi3p ACB`)\n"
-        "- /theodoiall: Theo dõi giá 1 của tất cả mã chứng khoán trong bao nhiêu phút (Ví dụ: `/theodoiall 5`)\n"
-        "- /sosanh <Mã chứng khoán> <Điều kiện> <Giá>: So sánh giá 1 của mã chứng khoán với giá đã nhập (Ví dụ: `/sosanh ACB > 25.00`)\n"
-        "- /help: Hiển thị danh sách các lệnh\n"
+        "- /theodoi3p: Theo dõi giá 1 của mã chứng khoán trong 3 phút (Ví dụ: `/theodoi3p ACB`)\n"
+        "- /theodoiall <Số phút>: Theo dõi giá 1 của tất cả mã chứng khoán trong khoảng thời gian đã chỉ định, nếu tăng 1% thì sẽ thông baó (Ví dụ: `/theodoiall 5`)\n"
+        "- /batdauchoidoi <Mã chứng khoán> <Điều kiện> <Giá>: Theo dõi giá 1 của mã chứng khoán và thông báo khi điều kiện được thỏa mãn (Ví dụ: `/batdauchoidoi ACB > 25.00`)\n"
+        "- /dungchodoi: Dừng theo dõi điều kiện đã đặt cho mã chứng khoán (Ví dụ: `/dungchodoi`)\n"
+        "- /help: Hiển thị danh sách các lệnh này\n"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
@@ -226,8 +225,8 @@ async def track_all_stocks_price(update: Update, context: ContextTypes.DEFAULT_T
     else:
         await update.message.reply_text("Vui lòng nhập số phút theo dõi sau lệnh /theodoiall. Ví dụ: /theodoiall 5")
 
-#! Hàm so sánh giá
-async def compare_stock_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+#! Hàm bắt đầu chờ đợi điều kiện
+async def start_waiting_for_condition(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if context.args and len(context.args) == 3:
         stock_code = context.args[0].strip().upper()
         comparison_operator = context.args[1].strip()  # ">" hoặc "<"
@@ -235,30 +234,46 @@ async def compare_stock_price(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         await update.message.reply_text(f"🔄 Đang theo dõi giá cho mã chứng khoán: {stock_code}...")
 
-        # Lấy giá hiện tại từ cơ sở dữ liệu
-        stock_data = await asyncio.get_event_loop().run_in_executor(executor, single_stock_data, stock_code)
+        # Lưu job vào context để có thể hủy sau này
+        job = context.job_queue.run_repeating(check_stock_price, interval=10, first=0, context=(update.message.chat_id, stock_code, comparison_operator, target_price))
+        context.chat_data["waiting_job"] = job
+        await update.message.reply_text("Đã bắt đầu theo dõi điều kiện.")
 
-        if not stock_data or len(stock_data) == 0:
-            await update.message.reply_text("Không tìm thấy mã chứng khoán.")
-            return
-
-        current_price = float(stock_data[0]['best1offer_price'])
-
-        # So sánh giá
-        if comparison_operator == ">":
-            if current_price > target_price:
-                await update.message.reply_text(f"{stock_code} hiện tại có giá {current_price}, lớn hơn {target_price}.")
-            else:
-                await update.message.reply_text(f"{stock_code} hiện tại có giá {current_price}, không lớn hơn {target_price}.")
-        elif comparison_operator == "<":
-            if current_price < target_price:
-                await update.message.reply_text(f"{stock_code} hiện tại có giá {current_price}, nhỏ hơn {target_price}.")
-            else:
-                await update.message.reply_text(f"{stock_code} hiện tại có giá {current_price}, không nhỏ hơn {target_price}.")
-        else:
-            await update.message.reply_text("Vui lòng sử dụng '>' hoặc '<' để so sánh.")
     else:
-        await update.message.reply_text("Vui lòng nhập mã chứng khoán, điều kiện so sánh và giá. Ví dụ: /sosanh ACB > 25.00")
+        await update.message.reply_text("Vui lòng nhập mã chứng khoán, điều kiện so sánh và giá. Ví dụ: /batdauchoidoi ACB > 25.00")
+
+#! Hàm kiểm tra giá chứng khoán
+async def check_stock_price(context: ContextTypes.DEFAULT_TYPE):
+    chat_id, stock_code, comparison_operator, target_price = context.job.context
+
+    # Lấy giá hiện tại từ cơ sở dữ liệu
+    stock_data = await asyncio.get_event_loop().run_in_executor(executor, single_stock_data, stock_code)
+
+    if not stock_data or len(stock_data) == 0:
+        await context.bot.send_message(chat_id, f"Không tìm thấy mã chứng khoán {stock_code}.")
+        return
+
+    current_price = float(stock_data[0]['best1offer_price'])
+
+    # So sánh giá
+    if comparison_operator == ">":
+        if current_price > target_price:
+            await context.bot.send_message(chat_id, f"{stock_code} hiện tại có giá {current_price}, lớn hơn {target_price}.")
+            context.job.schedule_removal()  # Hủy job
+    elif comparison_operator == "<":
+        if current_price < target_price:
+            await context.bot.send_message(chat_id, f"{stock_code} hiện tại có giá {current_price}, nhỏ hơn {target_price}.")
+            context.job.schedule_removal()  # Hủy job
+
+#! Hàm dừng theo dõi điều kiện
+async def stop_waiting_for_condition(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    job = context.chat_data.get("waiting_job")
+    if job:
+        job.schedule_removal()
+        del context.chat_data["waiting_job"]
+        await update.message.reply_text("Đã dừng theo dõi điều kiện.")
+    else:
+        await update.message.reply_text("Không có lệnh nào đang chạy.")
 
 #! Khởi tạo bot
 app = ApplicationBuilder().token('7928962019:AAFT_w5aEzE-M875p1zPkJTSn7r1a7tLRNY').build()
@@ -272,7 +287,8 @@ app.add_handler(CommandHandler("stop", stop_auto_fetch))
 app.add_handler(CommandHandler("help", help_command))
 app.add_handler(CommandHandler("theodoi3p", track_stock_price))
 app.add_handler(CommandHandler("theodoiall", track_all_stocks_price))
-app.add_handler(CommandHandler("sosanh", compare_stock_price))
+app.add_handler(CommandHandler("batdauchoidoi", start_waiting_for_condition))
+app.add_handler(CommandHandler("dungchodoi", stop_waiting_for_condition))
 
 #! Chạy bot
 app.run_polling()
