@@ -36,3 +36,21 @@ def log_user_event(user_id, username, command, details, chat_id):
     finally:
         cursor.close()
         connection.close()
+
+def delete_all_user_events():
+    connection = connect_database()
+    if connection is None:
+        logging.error("Cannot connect to the database.")
+        return
+
+    try:
+        cursor = connection.cursor()
+        query = "DELETE FROM user_events"
+        cursor.execute(query)
+        connection.commit()
+        logging.info("All user events have been deleted.")
+    except mysql.connector.Error as err:
+        logging.error(f"Error deleting user events: {err}")
+    finally:
+        cursor.close()
+        connection.close()
