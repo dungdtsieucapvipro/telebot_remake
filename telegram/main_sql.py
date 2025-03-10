@@ -7,6 +7,9 @@ import asyncio
 from get_stock_sql import fetch_all_stock_data, fetch_single_stock_data, single_stock_data, all_stock_data
 import logging  # Thêm import logging
 from sql.database import connect_database
+import logging 
+from user_events import log_user_event
+import mysql.connector
 
 
 #! Cấu hình logging
@@ -28,6 +31,7 @@ async def display_help(update: Update) -> None:
         "- /theodoiall <Số phút>: Theo dõi giá 1 của tất cả mã chứng khoán trong khoảng thời gian đã chỉ định, nếu tăng 1% thì sẽ thông baó (Ví dụ: `/theodoiall 5`)\n"
         "- /batdauchoidoi <Mã chứng khoán> <Điều kiện> <Giá>: Theo dõi giá 1 của mã chứng khoán và thông báo khi điều kiện được thỏa mãn (Ví dụ: `/batdauchoidoi ACB > 25.00`)\n"
         "- /dungchodoi: Dừng theo dõi điều kiện đã đặt cho mã chứng khoán (Ví dụ: `/dungchodoi`)\n"
+        "- /xemlog: Xem nhật ký sự kiện của bạn (hoặc tất cả nếu bạn là admin)\n"
         "- /help: Hiển thị danh sách các lệnh này\n"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
@@ -46,9 +50,18 @@ async def set_bot_commands(application):
     await application.bot.set_my_commands(commands)
 
 #! Hàm chào hỏi
+# Example command handler with logging
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f"Hello {update.effective_user.first_name}!")
-    await display_help(update)  
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "hello"
+    details = "User greeted the bot"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
+    await update.message.reply_text(f"Hello {update.effective_user.first_name}!") 
 
 
 #! Lệnh /help
@@ -61,6 +74,15 @@ ADMIN_ID = 6133213893  # Thay thế bằng ID của bạn
 
 #! Hàm tự động lấy dữ liệu mỗi 1 phút
 async def auto_fetch_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "auto"
+    details = "Started auto-fetching data"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("Bạn không có quyền sử dụng lệnh này.")
         return
@@ -69,12 +91,22 @@ async def auto_fetch_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.chat_data["auto_fetch_job"] = job
     await update.message.reply_text("Đã bắt đầu chế độ tự động lấy dữ liệu.")
     await display_help(update)
+
 async def fetch_data_job(context: ContextTypes.DEFAULT_TYPE):
     await asyncio.get_event_loop().run_in_executor(executor, fetch_all_stock_data)
     logging.info("Đã tự động lấy dữ liệu chứng khoán.")
 
 #! Hàm dừng chế độ tự động
 async def stop_auto_fetch(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "stop"
+    details = "Stopped auto-fetching data"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("Bạn không có quyền sử dụng lệnh này.")
         return
@@ -87,8 +119,18 @@ async def stop_auto_fetch(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Không có chế độ tự động nào đang chạy.")
     await display_help(update)
+
 #! Hàm lấy thông tin chứng khoán cụ thể
 async def get_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "getstock"
+    details = f"Requested stock info for {context.args[0]}" if context.args else "No stock code provided"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
     if context.args:
         stock_code = context.args[0].strip().upper()
         await update.message.reply_text("🔄 Đang lấy dữ liệu từ cơ sở dữ liệu, vui lòng đợi...")
@@ -119,6 +161,15 @@ async def get_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 #! Hàm lấy tất cả thông tin chứng khoán
 async def get_all_stocks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "getallstocks"
+    details = "Requested all stock info"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
     await update.message.reply_text("Đang lấy dữ liệu, vui lòng đợi...")
     try:
         loop = asyncio.get_event_loop()
@@ -148,6 +199,15 @@ async def get_all_stocks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 #! Hàm theo dõi giá trị bestOffer1
 async def track_stock_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "theodoi3p"
+    details = f"Tracking stock price for {context.args[0]}" if context.args else "No stock code provided"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
     if context.args:
         stock_code = context.args[0].strip().upper()
         await update.message.reply_text(f"🔄 Đang theo dõi giá cho mã chứng khoán: {stock_code}...")
@@ -183,6 +243,15 @@ async def track_stock_price(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 #! Hàm theo dõi giá cho tất cả mã chứng khoán
 async def track_all_stocks_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "theodoiall"
+    details = f"Tracking all stocks for {context.args[0]} minutes" if context.args else "No duration provided"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
     if context.args:
         try:
             duration_minutes = int(context.args[0])
@@ -227,6 +296,15 @@ async def track_all_stocks_price(update: Update, context: ContextTypes.DEFAULT_T
 
 #! Hàm bắt đầu chờ đợi điều kiện
 async def start_waiting_for_condition(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "batdauchoidoi"
+    details = f"Started waiting for condition on {context.args[0]}" if context.args else "No stock code provided"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
     if context.args and len(context.args) == 3:
         stock_code = context.args[0].strip().upper()
         comparison_operator = context.args[1].strip()  # ">" hoặc "<"
@@ -267,6 +345,15 @@ async def check_stock_price(context: ContextTypes.DEFAULT_TYPE):
 
 #! Hàm dừng theo dõi điều kiện
 async def stop_waiting_for_condition(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "dungchodoi"
+    details = "Stopped waiting for condition"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
     job = context.chat_data.get("waiting_job")
     if job:
         job.schedule_removal()
@@ -274,6 +361,55 @@ async def stop_waiting_for_condition(update: Update, context: ContextTypes.DEFAU
         await update.message.reply_text("Đã dừng theo dõi điều kiện.")
     else:
         await update.message.reply_text("Không có lệnh nào đang chạy.")
+
+#! Hàm xem log người dùng
+async def view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    command = "xemlog"
+    details = "Viewed logs"
+    chat_id = update.effective_chat.id
+
+    # Log the user event
+    log_user_event(user_id, username, command, details, chat_id)
+
+    connection = connect_database()
+    if connection is None:
+        await update.message.reply_text("Không thể kết nối đến cơ sở dữ liệu.")
+        return
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+        if user_id == ADMIN_ID:
+            query = "SELECT * FROM user_events ORDER BY timestamp DESC LIMIT 10"
+            cursor.execute(query)
+        else:
+            query = "SELECT * FROM user_events WHERE user_id = %s ORDER BY timestamp DESC LIMIT 10"
+            cursor.execute(query, (user_id,))
+
+        logs = cursor.fetchall()
+        if logs:
+            message = "*Nhật ký sự kiện gần đây:*\n"
+            for log in logs:
+                message += (
+                    f"- User: {log['username']}\n"
+                    f"  Command: {log['command']}\n"
+                    f"  Details: {log['details']}\n"
+                    f"  Time: {log['timestamp']}\n"
+                    f"  Chat ID: {log['chat_id']}\n"
+                    "\n"
+                )
+            # Log the message to check its content
+            logging.info(f"Sending message: {message}")
+            await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+        else:
+            await update.message.reply_text("Không có nhật ký nào để hiển thị.")
+    except mysql.connector.Error as err:
+        logging.error(f"Đã xảy ra lỗi khi truy vấn nhật ký: {err}")
+        await update.message.reply_text("Đã xảy ra lỗi khi truy vấn nhật ký.")
+    finally:
+        cursor.close()
+        connection.close()
 
 #! Khởi tạo bot
 app = ApplicationBuilder().token('7928962019:AAFT_w5aEzE-M875p1zPkJTSn7r1a7tLRNY').build()
@@ -289,6 +425,7 @@ app.add_handler(CommandHandler("theodoi3p", track_stock_price))
 app.add_handler(CommandHandler("theodoiall", track_all_stocks_price))
 app.add_handler(CommandHandler("batdauchoidoi", start_waiting_for_condition))
 app.add_handler(CommandHandler("dungchodoi", stop_waiting_for_condition))
+app.add_handler(CommandHandler("xemlog", view_logs))
 
 #! Chạy bot
 app.run_polling()
