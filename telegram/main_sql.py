@@ -28,12 +28,13 @@ async def display_help(update: Update) -> None:
         "- /hello: Chào hỏi bot\n"
         "- /getstock <Mã chứng khoán>: Xem thông tin về mã chứng khoán cụ thể (Ví dụ: `/getstock ACB`)\n"
         "- /getallstocks: Lấy tất cả thông tin chứng khoán hiện tại\n"
-        "- /theodoi3p: Theo dõi giá 1 của mã chứng khoán trong 3 phút (Ví dụ: `/theodoi3p ACB`)\n"
+        # "- /theodoi3p: Theo dõi giá 1 của mã chứng khoán trong 3 phút (Ví dụ: `/theodoi3p ACB`)\n"
         "- /theodoiall <Số phút>: Theo dõi giá 1 của tất cả mã chứng khoán trong khoảng thời gian đã chỉ định, nếu tăng 1% thì sẽ thông baó (Ví dụ: `/theodoiall 5`)\n"
         "- /batdauchoidoi <Mã chứng khoán> <Điều kiện> <Giá>: Theo dõi giá 1 của mã chứng khoán và thông báo khi điều kiện được thỏa mãn (Ví dụ: `/batdauchoidoi ACB > 25.00`)\n"
-        "- /dungchodoi: Dừng theo dõi điều kiện đã đặt cho mã chứng khoán (Ví dụ: `/dungchodoi`)\n"
-        "- /xemlog: Xem nhật ký sự kiện của bạn (hoặc tất cả nếu bạn là admin)\n"
-        "- /xoalog: Xóa tất cả nhật ký sự kiện (chỉ admin)\n"
+        # "- /dungchodoi: Dừng theo dõi điều kiện đã đặt cho mã chứng khoán (Ví dụ: `/dungchodoi`)\n"
+        "- /xemlog <Thời gian> <Đơn vị>: Xem nhật ký sự kiện của bạn (hoặc tất cả nếu bạn là admin) với khoảng thời gian tùy chỉnh (Ví dụ: `/xemlog 30 s` cho 30 giây, `/xemlog 5 m` cho 5 phút, `/xemlog 1 h` cho 1 giờ)\n"
+        # "- /xoalog: Xóa tất cả nhật ký sự kiện (chỉ admin)\n"
+        # "- /stopxemlog: Dừng tự động xem nhật ký sự kiện\n"
         "- /help: Hiển thị danh sách các lệnh này\n"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
@@ -323,14 +324,11 @@ async def stop_waiting_for_condition(update: Update, context: ContextTypes.DEFAU
 def escape_markdown_v2(text):
     return re.sub(r'([_*[\]()~`>#+\-=|{}.!])', r'\\\1', text)
 
+import asyncio
+
 async def view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    username = update.effective_user.username
-    command = "xemlog"
-    details = "Viewed logs"
     chat_id = update.effective_chat.id
-
-    log_user_event(user_id, username, command, details, chat_id)
 
     connection = connect_database()
     if connection is None:
@@ -348,20 +346,17 @@ async def view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         logs = cursor.fetchall()
         if logs:
-            message = "*Nhật ký sự kiện gần đây:*\n"
+            message = "*Nhật ký sự kiện gần đây:*"
             for log in logs:
                 message += (
                     f"- User: {log['username']}\n"
                     f"  Command: {log['command']}\n"
                     f"  Details: {log['details']}\n"
                     f"  Time: {log['timestamp']}\n"
-                    f"  Chat ID: {log['chat_id']}\n"
-                    "\n"
+                    f"  Chat ID: {log['chat_id']}\n\n"
                 )
 
-            # Escape ký tự đặc biệt trước khi gửi
             message = escape_markdown_v2(message)
-
             logging.info(f"Sending message: {message}")
             await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN_V2)
         else:
@@ -372,7 +367,51 @@ async def view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     finally:
         cursor.close()
         connection.close()
+
     await display_help(update)
+
+    if context.args:
+        try:
+            duration = int(context.args[0])
+            unit = context.args[1].lower() if len(context.args) > 1 else 's'
+            if unit == 'm':
+                duration *= 60
+            elif unit == 'h':
+                duration *= 3600
+
+            if "auto_view_logs_task" in context.chat_data:
+                context.chat_data["auto_view_logs_task"].cancel()
+                del context.chat_data["auto_view_logs_task"]
+
+            task = asyncio.create_task(auto_run_view_logs(update, context, duration))
+            context.chat_data["auto_view_logs_task"] = task
+        except ValueError:
+            await update.message.reply_text("Vui lòng nhập thời gian hợp lệ.")
+    else:
+        await update.message.reply_text("Vui lòng nhập thời gian tự động xem log. Ví dụ: /xemlog 30 s")
+
+async def auto_run_view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE, duration: int):
+    try:
+        while True:
+            await asyncio.sleep(duration)
+            await view_logs(update, context)
+    except asyncio.CancelledError:
+        logging.info("Task auto_run_view_logs đã bị hủy.")
+
+async def stop_auto_view_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if "auto_view_logs_task" in context.chat_data:
+        task = context.chat_data["auto_view_logs_task"]
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        del context.chat_data["auto_view_logs_task"]
+        await update.message.reply_text("Đã dừng tự động xem nhật ký.")
+    else:
+        await update.message.reply_text("Không có chế độ tự động xem nhật ký nào đang chạy.")
+
 #! Hàm xóa tất cả log người dùng
 async def delete_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -400,6 +439,7 @@ app.add_handler(CommandHandler("batdauchoidoi", start_waiting_for_condition))
 app.add_handler(CommandHandler("dungchodoi", stop_waiting_for_condition))
 app.add_handler(CommandHandler("xemlog", view_logs))
 app.add_handler(CommandHandler("xoalog", delete_logs))
+app.add_handler(CommandHandler("stopxemlog", stop_auto_view_logs))
 
 #! Chạy bot
 app.run_polling()
